@@ -85,3 +85,12 @@ run;
 
 
 
+
+Data _Temp_1;
+ Candidate = 1;
+ R2 = 1;
+ RMSE = 1;
+ output;
+Run;
+
+
