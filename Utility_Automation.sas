@@ -292,7 +292,9 @@ item 4: 2 curves with balance gackground. Fill y_axis1 (curve1), y_axis2 (curve2
  Proc Import Out=&output.
  DATAFILE = &File_Name.
  DBMS = &filetype. Replace;
- SHEET = &sheet.;
+   %if %upcase(&filetype.) = XLSX %then %do;
+      SHEET = &sheet.;
+   %end;
  GETNAMES = YES; 
  Run;
 %Mend Load_MEV;
