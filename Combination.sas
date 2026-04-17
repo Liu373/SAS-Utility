@@ -85,12 +85,163 @@ run;
 
 
 
-
+/***** Create Temp File used in Ex-Search *******/
 Data _Temp_1;
  Candidate = 1;
  R2 = 1;
  RMSE = 1;
  output;
 Run;
+
+
+/******** Filter Selected Variables for Following Steps ********/
+Data MEV_All_Selected;
+ set MEV_All;
+  where selection_Logic = "Y";
+ Run;
+
+
+/******************************************************* Stationary Test **************************************************************************************/
+%stationary_test_result(dsn=masterfile, var_list=MEV_All_Selected, outdsn=All_Stationary_Results, beg_num=1, end-num=200, col_name=MEV_List_All);
+
+/***Summarize the MEVs that Pass Either Zero mane or Single Mean *****/
+proc SQL noprint;
+  create table st_variable_single as
+  select distinct variable
+  from All_Stationary_Results
+  where type in ("Single Mean")
+  group by variable
+  having max(probtau) <= 0.05;
+Run;
+
+proc SQL noprint;
+  create table st_variable_zero as
+  select distinct variable
+  from All_Stationary_Results
+  where type in ("Zero Mean")
+  group by variable
+  having max(probtau) <= 0.05;
+Run;
+
+/** we can also use > 0.05 to focus those failed the st test **/
+
+Data st_variable_all;
+ set st_variable_zero  st_variable_single;
+Run;
+
+
+
+
+/******* Before P-Value and Other Test *********/
+Data _null_;
+  set EX_Search_Output end=eof;
+  Var_All = strip(Var_Chg) || " " || strip(Var_NoChg);
+  call symputx(cats('E', put(_n_, 8.)), Var_All);
+  call symputx(cats('R', put(_n_, 8.)), R2);
+  call symputx(cats('RMSE', put(_n_, 8.)), RMSE);
+  call symputx(cats('Candidate', put(_n_, 8.)), Candidate);
+  if eof then call symputx('max', _n_);
+Run;
+
+
+%put ************* &E2.  &max.  &R2.  &RMSE.  &Candidate.;
+
+
+
+%p_vif_test(dsn=masterfile, tar_var=target, outdsn=Final_Candidate_Stats);
+
+Proc dataset lib=work nolist nowarn;
+  delete _Param_Reg_: ;
+Run;
+
+Proc sort data=Final_Candidate_Stats;
+  by descending R2 order;
+Run;
+
+Data Final_Candidate_Stats;
+  set Final_Candidate_Stats;
+  format Estimate comma16.5  R2 comma16.3;
+Run;
+
+Data xx.Final_Candidate_Stats;
+  set Final_Candidate_Stats;
+Run;
+
+
+
+/******** Filter out Candidate Models that Pass P-Value VIF and has R2 > than xx% ***********/
+Data pass_candidate;
+  set xx.Final_Candidate_Stats;
+  where pvalue_check='Significant'  and VIF_check='Passed'  and R2>=xx;
+Run;
+
+Proc SQL;
+  create table pass_candidate2 as
+  select *, count(variable) as passed_var
+  from passcandidate
+  group by candidate;
+Run;
+
+data pass_candidate_f;
+  set pass_candidate2;
+  where passed_var = 4;
+Run;
+
+
+Proc SQL;
+  create table pass_candidates_list as
+  select distince candidate
+  from pass_candidates_f;
+Quit;
+
+
+Proc SQL;
+  create table Ex_Search_2 as
+  select a.*,  b.*
+  from pass_candidates_list as a
+  inner join EX_Search_Output  as b
+  on a.candidate = b.candidate;
+Quit;
+
+Data test;
+  set Ex_Search_2;
+  where candidate = 46688;
+Run;
+
+
+Data _null_;
+  set test end=eof;
+  Var_All = strip(Var_Chg) || " " || strip(Var_NoChg);
+  call symputx(cats('E', put(_n_, 8.)), Var_All);
+  call symputx(cats('R', put(_n_, 8.)), R2);
+  call symputx(cats('RMSE', put(_n_, 8.)), RMSE);
+  call symputx(cats('Candidate', put(_n_, 8.)), Candidate);
+  if eof then call symputx('max', _n_);
+Run;
+
+
+
+%Other_test(dsn1=masterfile, dsn2=test, tar_var=target, outdsn=test2);
+
+
+Proc SQL;
+  create table  _Temp_data_1_0 as
+  select a.*,
+         b.RMSE,
+         b.normality_flag,
+         b.autocorr_flag,
+         b.ramsey_flag,
+         b.arch_flag,
+         b.var_chg
+  from pass_candidates_f as a
+  left join
+  Candidate_NOV as b
+  on
+  a.candidate = b.candidate;
+Run;
+
+
+
+
 
 
